@@ -1,12 +1,11 @@
+# # you must set EMR_HOME to point to the root directory of your 'elastic-mapreduce-ruby' install
 
-# 
-# you must set EMR_HOME to point to the root directory of your 'elastic-mapreduce-ruby' install
-#
 export PATH=$EMR_HOME:$PATH
 
 # EMR helpers
 KEYPAIR=`cat $EMR_HOME/credentials.json | grep key-pair-file | cut -d':' -f2 | sed -n 's|.*"\([^"]*\)".*|\1|p'`
-export EMR_SSH_OPTS="-i "$KEYPAIR" -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
+alias essh="ssh -i $KEYPAIR -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
+alias escp="scp -i $KEYPAIR -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
 
 function emr {
   RESULT=`elastic-mapreduce $*`
@@ -15,6 +14,26 @@ function emr {
   [ -n "$ID" ] && export EMR_FLOW_ID="$ID"
   
   echo "$RESULT"
+}
+
+function emrattach {
+  if [ -z "$1" ]; then
+    if [ -z "$EMR_FLOW_ID" ]; then
+      echo "Not currently attached to any EMR cluster."
+    else
+      listing=`emr --list`
+      clustername=`echo $listing  | grep $EMR_FLOW_ID | cut -d' ' -f4`
+      echo "Currently attached to $clustername."
+    fi
+  else
+    flowid=`emr --list | grep $1 | cut -d' ' -f1`
+    if [ -z "$flowid" ]; then
+      echo "Couldn't attach; cluster named $1 doesn't exist!"
+    else
+      export EMR_FLOW_ID=$flowid
+      echo "Successfully attached to $1."
+    fi
+  fi
 }
 
 function emrset {
@@ -45,14 +64,14 @@ function emrhost {
 
 function emrscreen {
  HOST=`emrhost $1`
- ssh $EMR_SSH_OPTS -t "hadoop@$HOST" 'screen -s -$SHELL -D -R'
+ essh -t "hadoop@$HOST" 'screen -s -$SHELL -D -R'
 }
 
 function emrtail {
   if [ -z "$1" ]; then
     echo "Must provide step number to tail!"
     HOST=`emrhost $HH`
-    ssh $EMR_SSH_OPTS -t "hadoop@$HOST" "ls -1 /mnt/var/log/hadoop/steps/"
+    essh -t "hadoop@$HOST" "ls -1 /mnt/var/log/hadoop/steps/"
     return
   fi
       
@@ -64,18 +83,18 @@ function emrtail {
     STEP=$1
   fi   
   HOST=`emrhost $HH`
-  ssh $EMR_SSH_OPTS -t "hadoop@$HOST" "tail -100f /mnt/var/log/hadoop/steps/$STEP/syslog"
+  essh -t "hadoop@$HOST" "tail -100f /mnt/var/log/hadoop/steps/$STEP/syslog"
 }
 
 function emrlogin {
  HOST=`emrhost $1`
- ssh $EMR_SSH_OPTS "hadoop@$HOST"
+ essh "hadoop@$HOST"
 }
  
 function emrproxy {
  HOST=`emrhost $1`
  echo http://$HOST:9100
- ssh $EMR_SSH_OPTS -D 6666 -N "hadoop@$HOST"
+ essh -D 6666 -N "hadoop@$HOST"
 }
 
 function emrstat {
@@ -91,6 +110,5 @@ function emrterminate {
 
 function emrscp {
  HOST=`emrhost`
- scp $EMR_SSH_OPTS $1 "hadoop@$HOST:"
+ escp $1 "hadoop@$HOST:"
 }
-
